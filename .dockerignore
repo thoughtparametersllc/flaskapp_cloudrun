@@ -1,0 +1,16 @@
+.venv/
+Dockerfile
+docker-compose.yml
+docker-compose.override.yml
+.git/
+*.pyc
+__pycache__/
+.env
+.env.*
+logs/
+*.log
+README.md
+tests/
+docs/
+.github/
+.vscode/

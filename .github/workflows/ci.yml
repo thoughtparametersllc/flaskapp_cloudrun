@@ -1,0 +1,54 @@
+---
+name: Continuous Integration
+on:
+    push:
+        branches:
+            - main
+    pull_request:
+        branches:
+            - main
+
+# Add default permissions of read
+permissions:
+    contents: read
+
+jobs:
+    lint:
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v6
+
+            - name: Python Linting
+              uses: thoughtparametersllc/python-linting@v1
+              with:
+                python-version: '3.10'
+                requirements-file: 'dev-requirements.txt'
+                pylint-options: '--disable=C0114,C0115,C0116 --max-line-length=120'
+                black-options: '--line-length 120'
+                mypy-options: '--ignore-missing-imports'
+                commit-badges: 'false'
+                
+
+    test:
+        runs-on: ubuntu-latest
+        needs: lint
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v6
+
+            - name: Python Unit Testing
+              uses: thoughtparametersllc/python-unit-testing@v1
+              with:
+                python-version: '3.10'
+                requirements-file: 'dev-requirements.txt'
+                pytest-options: '--cov=./ --cov-report=xml'
+                commit-badges: 'false'
+
+            - name: Upload coverage to Codecov
+              uses: codecov/codecov-action@v3
+              with:
+                files: ./coverage.xml
+                fail_ci_if_error: true
+                verbose: true
