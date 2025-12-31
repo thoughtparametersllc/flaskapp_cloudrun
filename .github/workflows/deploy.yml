@@ -44,4 +44,4 @@ jobs:
 
             - name: Allow unauthenticated invocations
               run: |
-                gcloud run services update flaskapp-cloudrun --no-invoker-iam-check
+                gcloud run services update flaskapp-cloudrun --no-invoker-iam-check --region us-central1 --project=${{ secrets.GCP_PROJECT_ID }}
