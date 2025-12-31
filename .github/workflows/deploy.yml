@@ -32,7 +32,8 @@ jobs:
             - name: Build Image - Using gcloud CLI and submit to Container Registry
               run: |
                 gcloud info
-                gcloud builds submit --tag gcr.io/${{ secrets.GCP_PROJECT_ID }}/flaskapp-cloudrun:${{ github.sha }} --suppress-logs .
+                gcloud auth print-access-token
+                gcloud builds submit --tag gcr.io/${{ secrets.GCP_PROJECT_ID }}/flaskapp-cloudrun:${{ github.sha }} --suppress-logs --project=${{ secrets.GCP_PROJECT_ID }} .
 
             - name: Deploy to Cloud Run
               uses: google-github-actions/deploy-cloudrun@v3
