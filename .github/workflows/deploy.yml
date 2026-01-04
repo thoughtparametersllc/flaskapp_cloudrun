@@ -1,47 +1,82 @@
 ---
 name: Deploy to Cloud Run
 on:
-    push:
-        branches:
-            - main
+  push:
+    branches:
+      - main
 
 jobs:
-    deploy:
-        permissions:
-            contents: read
-            id-token: write
+  deploy:
+    permissions:
+      contents: read
+      id-token: write
 
-        runs-on: ubuntu-latest
-        steps:
-            - name: Checkout code
-              uses: actions/checkout@v6
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
 
-            - name: Set up Cloud SDK
-              id: gcloud-auth
-              uses: google-github-actions/auth@v3
-              with:
-                credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
+      - name: Set up Cloud SDK
+        id: gcloud-auth
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
 
-            - name: Setup Google Cloud SDK
-              uses: google-github-actions/setup-gcloud@v3
-              with:
-                    project_id: ${{ secrets.GCP_PROJECT_ID }}
-                    version: '> 363.0.0'
+      - name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          version: '> 363.0.0'
 
 
-            - name: Build Image - Using gcloud CLI and submit to Container Registry
-              run: |
-                gcloud info
-                gcloud builds submit --tag gcr.io/${{ secrets.GCP_PROJECT_ID }}/flaskapp-cloudrun:${{ github.sha }} --async --project=${{ secrets.GCP_PROJECT_ID }} .
-                sleep 45  # Wait for a bit to ensure the build starts
+      # STEP 1: Submit the build async and capture the BUILD_ID
+      - name: Submit Build Async
+        id: build
+        run: |
+          echo "Submitting build..."
+          # We use --format="value(id)" to get clean output of just the ID
+          BUILD_ID=$(gcloud builds submit --tag gcr.io/${{ secrets.GCP_PROJECT_ID }}/flaskapp-cloudrun:${{ github.sha }} --async --format="value(id)" --project=${{ secrets.GCP_PROJECT_ID }} .)
+          
+          echo "Build submitted with ID: $BUILD_ID"
+          
+          # Save BUILD_ID to GITHUB_ENV so next steps can see it
+          echo "BUILD_ID=$BUILD_ID" >> $GITHUB_ENV
 
-            - name: Deploy to Cloud Run
-              uses: google-github-actions/deploy-cloudrun@v3
-              with:
-                service: flaskapp-cloudrun
-                image: gcr.io/${{ secrets.GCP_PROJECT_ID }}/flaskapp-cloudrun:${{ github.sha }}
-                region: us-central1
+      # STEP 2: Custom Wait Loop (Replaces the sleep)
+      - name: Wait for Build Completion
+        run: |
+          echo "Waiting for Build ID: $BUILD_ID to complete..."
+          
+          # Start a loop
+          while true; do
+            # Fetch the current status
+            STATUS=$(gcloud builds describe $BUILD_ID --project=${{ secrets.GCP_PROJECT_ID }} --format='value(status)')
+            
+            echo "Current Status: $STATUS"
+            
+            # Check for success
+            if [[ "$STATUS" == "SUCCESS" ]]; then
+              echo "Build completed successfully!"
+              break
+            fi
+            
+            # Check for failure scenarios to fail the action early
+            if [[ "$STATUS" == "FAILURE" || "$STATUS" == "CANCELLED" || "$STATUS" == "TIMEOUT" ]]; then
+              echo "Build failed with status: $STATUS"
+              exit 1
+            fi
+            
+            # Wait 10 seconds before checking again
+            sleep 10
+          done
 
-            - name: Allow unauthenticated invocations
-              run: |
-                gcloud run services update flaskapp-cloudrun --no-invoker-iam-check --region us-central1 --project=${{ secrets.GCP_PROJECT_ID }}
+      - name: Deploy to Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v3
+        with:
+          service: flaskapp-cloudrun
+          image: gcr.io/${{ secrets.GCP_PROJECT_ID }}/flaskapp-cloudrun:${{ github.sha }}
+          region: us-central1
+
+      - name: Allow unauthenticated invocations
+        run: |
+          gcloud run services update flaskapp-cloudrun --no-invoker-iam-check --region us-central1 --project=${{ secrets.GCP_PROJECT_ID }}
